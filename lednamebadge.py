@@ -319,9 +319,11 @@ class SimpleTextAndIcons:
     for i in bitmap_named:
         bitmap_builtin[bitmap_named[i][2]] = bitmap_named[i]
 
-    def __init__(self):
+    def __init__(self, font, fontsize):
         self.bitmap_preloaded = [([], 0)]
         self.bitmaps_preloaded_unused = False
+        self.font = font
+        self.fontsize = fontsize
 
     def add_preload_img(self, filename):
         """Still used by main, but deprecated. PLease use ":"-notation for bitmap() / bitmap_text()"""
@@ -373,6 +375,27 @@ class SimpleTextAndIcons:
             return SimpleTextAndIcons.bitmap_named[name][2]
 
         text = re.sub(r':([^:]*):', replace_symbolic, text)
+
+        if self.font != 'default':
+            if any([ord(c) < 32 for c in text]):
+                raise ValueError("Custom fonts cannot be combined with builtin icons.")
+            try:
+                from PIL import Image, ImageFont, ImageDraw
+            except:
+                print("If you like to use custom fonts, the module pillow is needed. Try:")
+                print("$ pip install pillow")
+                LedNameBadge._print_common_install_hints('pillow', 'python3-pillow')
+                sys.exit(1)
+            font = ImageFont.truetype(self.font, 16)
+            width = int(font.getlength(text))
+            img = Image.new(mode="RGBA",
+                            size=(width, self.fontsize),
+                            color='black')
+            draw = ImageDraw.Draw(img)
+            draw.text((0, 0), str(text), font=font, fill='white')
+            img.save("test.png")
+            return self.bitmap_img(img)
+
         buf = array('B')
         cols = 0
         for c in text:
@@ -396,8 +419,11 @@ class SimpleTextAndIcons:
             LedNameBadge._print_common_install_hints('pillow', 'python3-pillow')
             sys.exit(1)
 
-        im = Image.open(file)
-        print("fetching bitmap from file %s -> (%d x %d)" % (file, im.width, im.height))
+        if isinstance(file, Image.Image):
+            im = file
+        else:
+            im = Image.open(file)
+            print("fetching bitmap from file %s -> (%d x %d)" % (file, im.width, im.height))
         if im.height != 11:
             sys.exit("%s: image height must be 11px. Seen %d" % (file, im.height))
         buf = array('B')
@@ -1056,6 +1082,8 @@ def main():
                         help="1: animated border, 0: normal. Up to 8 comma-separated values.")
     parser.add_argument('-p', '--preload', metavar='FILE', action='append',
                         help=argparse.SUPPRESS)  # "Load bitmap images. Use ^A, ^B, ^C, ... in text messages to make them visible. Deprecated, embed within ':' instead")
+    parser.add_argument('-f', '--font', default='default', help="Path to TTF file of the font to be used for text messages")
+    parser.add_argument('-F', '--fontsize', default=11, help="Fontsize to use for custom fonts")
     parser.add_argument('-l',
                         '--list-names',
                         action='version',
@@ -1086,7 +1114,7 @@ def main():
     """ % sys.argv[0])
     args = parser.parse_args()
 
-    creator = SimpleTextAndIcons()
+    creator = SimpleTextAndIcons(font=args.font, fontsize=args.fontsize)
 
     if args.preload:
         for filename in args.preload:
